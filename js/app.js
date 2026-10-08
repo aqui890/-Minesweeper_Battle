@@ -37,7 +37,8 @@
 
   function cleanRecord(row) {
     if (!row || typeof row.timeMs !== "number" || typeof row.lives !== "number") return null;
-    if (!Number.isFinite(row.timeMs) || row.timeMs < 0) return null;
+    // 시간이 정확히 0인 기록은 이전 판의 일시정지 시각이 남아 잘못 저장된 것이다
+    if (!Number.isFinite(row.timeMs) || row.timeMs <= 0) return null;
     return {
       timeMs: row.timeMs,
       lives: Math.max(0, Math.min(3, Math.floor(row.lives))),
@@ -217,6 +218,7 @@
     state.diffKey = diffKey || state.diffKey;
     state.board = BoardAPI.createBoard(state.diffKey);
     state.pauseAccum = 0;
+    state.pausedAt = 0;
     state.startedAt = 0;
     state.tutorialMode = false;
     state.pendingMine = null;
