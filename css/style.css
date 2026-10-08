@@ -191,13 +191,6 @@ body {
   color: var(--muted);
 }
 
-.best-records {
-  margin: 0.85rem 0 0;
-  font-size: 0.78rem;
-  line-height: 1.55;
-  color: var(--muted);
-}
-
 .title-actions {
   display: flex;
   flex-wrap: wrap;
@@ -312,6 +305,92 @@ body {
 .tut-btn:hover {
   background: rgba(46, 230, 214, 0.16);
   border-color: var(--cyan);
+}
+
+.rank-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.45rem;
+  margin-bottom: 1rem;
+}
+
+.rank-tab {
+  background: transparent;
+  border: 1px solid rgba(46, 230, 214, 0.2);
+  color: var(--muted);
+  border-radius: var(--radius);
+  padding: 0.55rem;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 700;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.rank-tab:hover {
+  border-color: var(--cyan);
+  color: var(--text);
+}
+
+.rank-tab.selected {
+  border-color: var(--cyan);
+  background: rgba(46, 230, 214, 0.12);
+  color: var(--text);
+}
+
+.ranking-list {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.rank-row {
+  display: grid;
+  grid-template-columns: 1.75rem 4rem 1fr;
+  align-items: center;
+  gap: 0.6rem;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+}
+
+.rank-row.top {
+  background: rgba(240, 160, 64, 0.12);
+}
+
+.rank-no {
+  font-family: var(--font-display);
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.rank-row.top .rank-no {
+  color: var(--amber);
+}
+
+.rank-time {
+  font-family: var(--font-display);
+  color: var(--cyan);
+}
+
+.rank-meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-align: right;
+}
+
+.rank-empty {
+  color: var(--muted);
+  padding: 1rem 0;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.rank-note {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin: 0 0 1rem;
 }
 
 .stack-actions {

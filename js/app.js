@@ -21,21 +21,36 @@
   const DEFEAT_REVEAL_MS = 1800;
 
   const RECORD_KEY = "mine-battle-sweep-best";
-  const RECORD_DIFFS = [
-    ["beginner", "초급"],
-    ["intermediate", "중급"],
-    ["expert", "고급"],
-  ];
+  const RANK_LIMIT = 5;
+  const RECORD_DIFFS = ["beginner", "intermediate", "expert"];
+  const ENDING_LABELS = { normal: "노멀", hidden: "히든" };
 
   function showScreen(id) {
     $$(".screen").forEach((el) => el.classList.remove("active"));
     const target = document.getElementById(id);
     if (target) target.classList.add("active");
-    if (id === "screen-title") renderBestRecords();
   }
 
   function emptyRecords() {
-    return { beginner: null, intermediate: null, expert: null };
+    return { beginner: [], intermediate: [], expert: [] };
+  }
+
+  function cleanRecord(row) {
+    if (!row || typeof row.timeMs !== "number" || typeof row.lives !== "number") return null;
+    if (!Number.isFinite(row.timeMs) || row.timeMs < 0) return null;
+    return {
+      timeMs: row.timeMs,
+      lives: Math.max(0, Math.min(3, Math.floor(row.lives))),
+      ending: row.ending === "hidden" ? "hidden" : "normal",
+      playedAt: Number.isFinite(row.playedAt) ? row.playedAt : null,
+    };
+  }
+
+  function compareRecords(a, b) {
+    const aSec = Math.floor(a.timeMs / 1000);
+    const bSec = Math.floor(b.timeMs / 1000);
+    if (aSec !== bSec) return aSec - bSec;
+    return b.lives - a.lives;
   }
 
   function loadRecords() {
@@ -44,15 +59,11 @@
       if (!raw) return emptyRecords();
       const data = JSON.parse(raw);
       const out = emptyRecords();
-      RECORD_DIFFS.forEach(function (pair) {
-        const row = data && data[pair[0]];
-        if (!row || typeof row.timeMs !== "number" || typeof row.lives !== "number") return;
-        if (!Number.isFinite(row.timeMs) || row.timeMs < 0) return;
-        out[pair[0]] = {
-          timeMs: row.timeMs,
-          lives: row.lives,
-          ending: row.ending === "hidden" ? "hidden" : "normal",
-        };
+      RECORD_DIFFS.forEach(function (key) {
+        const value = data && data[key];
+        // 예전 버전은 난이도마다 기록 하나를 객체로 저장했다
+        const rows = Array.isArray(value) ? value : value ? [value] : [];
+        out[key] = rows.map(cleanRecord).filter(Boolean).sort(compareRecords).slice(0, RANK_LIMIT);
       });
       return out;
     } catch (err) {
@@ -68,35 +79,49 @@
     }
   }
 
-  function isBetterRecord(next, prev) {
-    if (!prev) return true;
-    const nextSec = Math.floor(next.timeMs / 1000);
-    const prevSec = Math.floor(prev.timeMs / 1000);
-    if (nextSec !== prevSec) return nextSec < prevSec;
-    return next.lives > prev.lives;
+  function commitRecord(diffKey, timeMs, lives, ending) {
+    const records = loadRecords();
+    const entry = { timeMs: timeMs, lives: lives, ending: ending, playedAt: Date.now() };
+    // 정렬은 안정적이라 동점이면 먼저 세운 기록이 위에 남는다
+    const ranked = records[diffKey].concat(entry).sort(compareRecords);
+    const place = ranked.indexOf(entry) + 1;
+    records[diffKey] = ranked.slice(0, RANK_LIMIT);
+    if (place <= RANK_LIMIT) saveRecords(records);
+    return { rank: place <= RANK_LIMIT ? place : null, best: records[diffKey][0] };
   }
 
-  function commitBestRecord(diffKey, timeMs, lives, ending) {
-    const records = loadRecords();
-    const next = { timeMs: timeMs, lives: lives, ending: ending };
-    const prev = records[diffKey];
-    const improved = isBetterRecord(next, prev);
-    if (improved) {
-      records[diffKey] = next;
-      saveRecords(records);
+  function formatDate(ms) {
+    const d = new Date(ms);
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+  }
+
+  function renderRanking(diffKey) {
+    $$(".rank-tab").forEach((btn) => {
+      const on = btn.dataset.diff === diffKey;
+      btn.classList.toggle("selected", on);
+      btn.setAttribute("aria-selected", String(on));
+    });
+    const list = loadRecords()[diffKey] || [];
+    const el = $("#ranking-list");
+    if (!list.length) {
+      el.innerHTML = `<li class="rank-empty">아직 기록이 없습니다. 이 난이도를 클리어하면 여기에 남습니다.</li>`;
+      return;
     }
-    return { improved: improved, best: improved ? next : prev };
+    el.innerHTML = list
+      .map((row, i) => {
+        const date = row.playedAt ? ` · ${formatDate(row.playedAt)}` : "";
+        return `<li class="rank-row${i === 0 ? " top" : ""}">
+          <span class="rank-no">${i + 1}</span>
+          <span class="rank-time">${formatTime(row.timeMs)}</span>
+          <span class="rank-meta">라이프 ${row.lives} · ${ENDING_LABELS[row.ending]}${date}</span>
+        </li>`;
+      })
+      .join("");
   }
 
-  function renderBestRecords() {
-    const el = $("#best-records");
-    if (!el) return;
-    const records = loadRecords();
-    el.textContent = RECORD_DIFFS.map(function (pair) {
-      const row = records[pair[0]];
-      if (!row) return pair[1] + " 기록 없음";
-      return pair[1] + " " + formatTime(row.timeMs) + " · 라이프 " + row.lives;
-    }).join("   ");
+  function openRanking() {
+    renderRanking(state.diffKey);
+    showScreen("screen-ranking");
   }
 
   function formatTime(ms) {
@@ -409,17 +434,17 @@
 
     let recordNote = "없음";
     if (!won) {
-      const saved = loadRecords()[board.diff.key];
-      if (saved) recordNote = formatTime(saved.timeMs) + " · 라이프 " + saved.lives;
+      const best = loadRecords()[board.diff.key][0];
+      if (best) recordNote = formatTime(best.timeMs) + " · 라이프 " + best.lives;
     } else {
       const endingKey =
         board.minesRemovedByBattle >= Math.ceil(board.mines * 0.4) ? "hidden" : "normal";
-      const saved = commitBestRecord(board.diff.key, board.elapsedMs, board.lives, endingKey);
+      const saved = commitRecord(board.diff.key, board.elapsedMs, board.lives, endingKey);
       recordNote =
         formatTime(saved.best.timeMs) +
         " · 라이프 " +
         saved.best.lives +
-        (saved.improved ? " · 갱신" : "");
+        (saved.rank ? ` · 이번 기록 ${saved.rank}위` : ` · 이번 기록 ${RANK_LIMIT}위 밖`);
     }
 
     if (!won) {
@@ -615,6 +640,10 @@
     $("#btn-start").addEventListener("click", () => beginGame(state.diffKey));
     $("#btn-how").addEventListener("click", () => showScreen("screen-how"));
     $("#btn-tutorial").addEventListener("click", () => showScreen("screen-tutorial"));
+    $("#btn-ranking").addEventListener("click", openRanking);
+    $$(".rank-tab").forEach((btn) => {
+      btn.addEventListener("click", () => renderRanking(btn.dataset.diff));
+    });
 
     $$("[data-back='title']").forEach((btn) => {
       btn.addEventListener("click", () => showScreen("screen-title"));

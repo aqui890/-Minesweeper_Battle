@@ -37,14 +37,30 @@
               <span class="diff-meta">16×30 · 지뢰 99</span>
             </button>
           </div>
-          <p class="best-records" id="best-records">최고 기록을 불러오는 중</p>
         </div>
 
         <div class="title-actions">
           <button type="button" id="btn-start" class="btn btn-primary">탐사 시작</button>
           <button type="button" id="btn-how" class="btn btn-ghost">조작 설명</button>
           <button type="button" id="btn-tutorial" class="btn btn-ghost">사격 연습</button>
+          <button type="button" id="btn-ranking" class="btn btn-ghost">랭킹 보기</button>
         </div>
+      </div>
+    </section>
+
+    <!-- Ranking -->
+    <section id="screen-ranking" class="screen">
+      <div class="panel">
+        <h2>랭킹</h2>
+        <p class="panel-desc">난이도별 클리어 기록 상위 5개입니다. 시간이 짧을수록, 같은 초면 남은 라이프가 많을수록 위에 옵니다.</p>
+        <div class="rank-tabs" role="tablist" aria-label="랭킹 난이도">
+          <button type="button" class="rank-tab" role="tab" data-diff="beginner">초급</button>
+          <button type="button" class="rank-tab" role="tab" data-diff="intermediate">중급</button>
+          <button type="button" class="rank-tab" role="tab" data-diff="expert">고급</button>
+        </div>
+        <ol class="ranking-list" id="ranking-list"></ol>
+        <p class="rank-note">기록은 이 브라우저에만 저장됩니다.</p>
+        <button type="button" class="btn btn-primary" data-back="title">돌아가기</button>
       </div>
     </section>
 
