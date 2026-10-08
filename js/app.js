@@ -15,12 +15,88 @@
     tutorialMode: false,
     longPressTimer: null,
     touchFlagged: false,
+    resultTimer: null,
   };
+
+  const DEFEAT_REVEAL_MS = 1800;
+
+  const RECORD_KEY = "mine-battle-sweep-best";
+  const RECORD_DIFFS = [
+    ["beginner", "초급"],
+    ["intermediate", "중급"],
+    ["expert", "고급"],
+  ];
 
   function showScreen(id) {
     $$(".screen").forEach((el) => el.classList.remove("active"));
     const target = document.getElementById(id);
     if (target) target.classList.add("active");
+    if (id === "screen-title") renderBestRecords();
+  }
+
+  function emptyRecords() {
+    return { beginner: null, intermediate: null, expert: null };
+  }
+
+  function loadRecords() {
+    try {
+      const raw = localStorage.getItem(RECORD_KEY);
+      if (!raw) return emptyRecords();
+      const data = JSON.parse(raw);
+      const out = emptyRecords();
+      RECORD_DIFFS.forEach(function (pair) {
+        const row = data && data[pair[0]];
+        if (!row || typeof row.timeMs !== "number" || typeof row.lives !== "number") return;
+        if (!Number.isFinite(row.timeMs) || row.timeMs < 0) return;
+        out[pair[0]] = {
+          timeMs: row.timeMs,
+          lives: row.lives,
+          ending: row.ending === "hidden" ? "hidden" : "normal",
+        };
+      });
+      return out;
+    } catch (err) {
+      return emptyRecords();
+    }
+  }
+
+  function saveRecords(records) {
+    try {
+      localStorage.setItem(RECORD_KEY, JSON.stringify(records));
+    } catch (err) {
+      /* 저장 공간이 막혀 있으면 이번 판 결과만 보여 준다 */
+    }
+  }
+
+  function isBetterRecord(next, prev) {
+    if (!prev) return true;
+    const nextSec = Math.floor(next.timeMs / 1000);
+    const prevSec = Math.floor(prev.timeMs / 1000);
+    if (nextSec !== prevSec) return nextSec < prevSec;
+    return next.lives > prev.lives;
+  }
+
+  function commitBestRecord(diffKey, timeMs, lives, ending) {
+    const records = loadRecords();
+    const next = { timeMs: timeMs, lives: lives, ending: ending };
+    const prev = records[diffKey];
+    const improved = isBetterRecord(next, prev);
+    if (improved) {
+      records[diffKey] = next;
+      saveRecords(records);
+    }
+    return { improved: improved, best: improved ? next : prev };
+  }
+
+  function renderBestRecords() {
+    const el = $("#best-records");
+    if (!el) return;
+    const records = loadRecords();
+    el.textContent = RECORD_DIFFS.map(function (pair) {
+      const row = records[pair[0]];
+      if (!row) return pair[1] + " 기록 없음";
+      return pair[1] + " " + formatTime(row.timeMs) + " · 라이프 " + row.lives;
+    }).join("   ");
   }
 
   function formatTime(ms) {
@@ -105,8 +181,14 @@
     updateHud();
   }
 
+  function cancelPendingResult() {
+    clearTimeout(state.resultTimer);
+    state.resultTimer = null;
+  }
+
   function beginGame(diffKey) {
     SFX.unlock();
+    cancelPendingResult();
     state.diffKey = diffKey || state.diffKey;
     state.board = BoardAPI.createBoard(state.diffKey);
     state.pauseAccum = 0;
@@ -241,35 +323,25 @@
       return;
     }
 
-    board.lives -= 1;
-    if (pending) {
-      // 패배해도 지뢰는 폭발하며 제거됨 (빨간 별 칸으로 보드에 남기지 않음)
-      BoardAPI.detonateMineAfterLoss(board, pending.r, pending.c);
-    }
+    // 사격전 패배는 한 번으로 탐사 종료. 이긴 칸만 정화되고, 진 칸은 폭발로 남긴다.
+    board.lives = 0;
+    if (pending) BoardAPI.detonateMineAfterLoss(board, pending.r, pending.c);
     state.pendingMine = null;
     $("#screen-battle").classList.remove("active");
+
+    board.over = true;
+    board.won = false;
+    BoardAPI.revealAllMines(board);
+    freezeElapsed(board);
+    stopTimer();
     renderBoard();
-
-    if (board.lives <= 0) {
-      board.over = true;
-      board.won = false;
-      BoardAPI.revealAllMines(board);
-      renderBoard();
-      stopTimer();
-      SFX.defeat();
+    SFX.defeat();
+    $("#board-tip").textContent = "사격 실패… 지뢰가 폭발했습니다. 남은 지뢰 위치를 확인하세요.";
+    cancelPendingResult();
+    state.resultTimer = setTimeout(() => {
+      state.resultTimer = null;
       showResult(false);
-      return;
-    }
-
-    SFX.guardBad();
-    if (state.pausedAt) {
-      state.pauseAccum += Date.now() - state.pausedAt;
-      state.pausedAt = 0;
-    }
-    startTimer();
-    $("#board-tip").textContent = `사격 실패… 라이프 ${board.lives} 남음. 해당 지뢰는 폭발하며 사라졌습니다.`;
-    updateHud();
-    afterOpen();
+    }, DEFEAT_REVEAL_MS);
   }
 
   function openCell(r, c) {
@@ -318,6 +390,13 @@
     }
   }
 
+  function freezeElapsed(board) {
+    if (!state.startedAt) return;
+    let paused = state.pauseAccum;
+    if (state.pausedAt) paused += Date.now() - state.pausedAt;
+    board.elapsedMs = Math.max(0, Date.now() - state.startedAt - paused);
+  }
+
   function showResult(won) {
     const board = state.board;
     const endingEl = $("#result-ending");
@@ -325,7 +404,23 @@
     const msgEl = $("#result-msg");
     const nextBtn = $("#btn-next");
 
+    freezeElapsed(board);
     endingEl.classList.remove("bad", "hidden");
+
+    let recordNote = "없음";
+    if (!won) {
+      const saved = loadRecords()[board.diff.key];
+      if (saved) recordNote = formatTime(saved.timeMs) + " · 라이프 " + saved.lives;
+    } else {
+      const endingKey =
+        board.minesRemovedByBattle >= Math.ceil(board.mines * 0.4) ? "hidden" : "normal";
+      const saved = commitBestRecord(board.diff.key, board.elapsedMs, board.lives, endingKey);
+      recordNote =
+        formatTime(saved.best.timeMs) +
+        " · 라이프 " +
+        saved.best.lives +
+        (saved.improved ? " · 갱신" : "");
+    }
 
     if (!won) {
       endingEl.textContent = "배드 엔딩";
@@ -361,6 +456,7 @@
       <div class="result-stat wide">사격 기록<strong>${typeLine}</strong></div>
       <div class="result-stat">최고 위험도<strong>${board.maxDangerBeaten || "-"}</strong></div>
       <div class="result-stat">난이도<strong>${board.diff.label}</strong></div>
+      <div class="result-stat wide">최고 기록<strong>${recordNote}</strong></div>
     `;
 
     showScreen("screen-result");
@@ -543,7 +639,10 @@
     });
 
     $("#btn-retry").addEventListener("click", () => beginGame(state.diffKey));
-    $("#btn-result-title").addEventListener("click", () => showScreen("screen-title"));
+    $("#btn-result-title").addEventListener("click", () => {
+      cancelPendingResult();
+      showScreen("screen-title");
+    });
     $("#btn-next").addEventListener("click", () => {
       const next = state.board?.diff?.next;
       if (next) beginGame(next);

@@ -191,6 +191,13 @@ body {
   color: var(--muted);
 }
 
+.best-records {
+  margin: 0.85rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
 .title-actions {
   display: flex;
   flex-wrap: wrap;

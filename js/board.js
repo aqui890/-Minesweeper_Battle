@@ -223,6 +223,7 @@
   function allMinesFlaggedExactly(board) {
     if (!board.minesPlaced) return false;
     let active = 0;
+    let wrongFlag = false;
     for (let r = 0; r < board.rows; r++) {
       for (let c = 0; c < board.cols; c++) {
         const cell = board.cells[r][c];
@@ -230,13 +231,13 @@
           active++;
           if (!cell.flagged) return false;
         } else if (cell.flagged && !cell.open) {
-          return false;
+          wrongFlag = true;
         }
       }
     }
-    // 깃발로 클리어하려면 표시할 활성 지뢰가 1개 이상 있어야 함
-    // (전부 배틀/폭발로 제거된 경우엔 안전 칸을 모두 열어야 함 → checkWin)
-    return active > 0;
+    // 남은 지뢰가 없으면 전부 사격으로 제거된 것이라, 잘못 꽂은 깃발이 있어도 클리어
+    if (active === 0) return true;
+    return !wrongFlag;
   }
 
   function toggleFlag(board, r, c) {
@@ -257,14 +258,14 @@
     board.minesRemovedByBattle++;
   }
 
-  /** 배틀 패배 시 지뢰 폭발·제거 (라이프 소모). 빨간 별 칸으로 남기지 않음 */
+  /** 배틀 패배 시 그 칸은 정화하지 않고 폭발한 지뢰로 남긴다. */
   function detonateMineAfterLoss(board, r, c) {
     const cell = board.cells[r][c];
-    cell.mine = false;
-    cell.cleared = true;
+    cell.mine = true;
+    cell.cleared = false;
     cell.open = true;
     cell.flagged = false;
-    cell.exploded = false;
+    cell.exploded = true;
   }
 
   /** 게임오버 시 남은 지뢰 공개 */
